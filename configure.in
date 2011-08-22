@@ -1,0 +1,15 @@
+AC_INIT([BMeter], [0.1])
+
+PKG_CHECK_MODULES(THIS, [libmary-1.0 >= 0.1, mycpp-1.0 >= 0.1])
+AC_SUBST(THIS_CFLAGS)
+AC_SUBST(THIS_LIBS)
+
+AM_INIT_AUTOMAKE([1.7 gnu nostdinc])
+
+AC_PROG_CC
+AC_PROG_CXX
+
+AC_CONFIG_FILES([Makefile
+		 src/Makefile])
+AC_OUTPUT
+
