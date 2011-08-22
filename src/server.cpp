@@ -22,6 +22,8 @@ public:
     bool got_server_addr;
     IpAddress server_addr;
 
+    Uint64 exit_after;
+
     Options ()
 	: help (false),
 
@@ -29,7 +31,9 @@ public:
 	  frame_size (2500),
 	  burst_width (1),
 
-	  got_server_addr (false)
+	  got_server_addr (false),
+
+	  exit_after ((Uint64) -1)
     {
     }
 };
@@ -44,6 +48,7 @@ void printUsage ()
 		 "  -s --size <number>      Frame size in bytes (default: 2500)\n"
 		 "  -b --burst <number>     Burst width (number of frames to send with zero interval (default: 1)\n"
 		 "  --bind <address>        ip_address:tcp_port to listen (default: *:7777)\n"
+		 "  --exit-after <number>   Exit after specified timeout in seconds.\n"
 		 "  -h --help               Show help message.\n");
     outs->flush ();
 }
@@ -235,6 +240,12 @@ TcpServer::Frontend const tcp_server_frontend = {
     accepted
 };
 
+void exitTimerTick (void * const /* cb_data */)
+{
+    logD_ (_func, "Exit timer expired (", options.exit_after, " seconds)");
+    server_app.stop ();
+}
+
 Result runServer ()
 {
     if (!options.got_server_addr) {
@@ -273,6 +284,14 @@ Result runServer ()
 						   NULL /* coderef_container */,
 						   (Time) (options.frame_duration * 1000 * options.burst_width),
 						   true /* periodical */);
+
+    if (options.exit_after != (Uint64) -1) {
+	server_app.getTimers()->addTimer (exitTimerTick,
+					  NULL /* cb_data */,
+					  NULL /* coderef_container */,
+					  options.exit_after,
+					  false /* periodical */);
+    }
 
     logI_ (_func, "Starting...");
     if (!server_app.run ())
@@ -362,6 +381,20 @@ bool cmdline_bind (char const * /* short_name */,
     return true;
 }
 
+bool cmdline_exit_after (char const * /* short_name */,
+			 char const * /* long_name */,
+			 char const *value,
+			 void       * /* opt_data */,
+			 void       * /* cb_data */)
+{
+    if (!strToUint64_safe (value, &options.exit_after)) {
+	errs->print ("Invalid value \"", value, "\" "
+		     "for --exit-after (number expected): ", exc->toString());
+	exit (EXIT_FAILURE);
+    }
+    return true;
+}
+
 }
 
 int main (int    argc,
@@ -371,7 +404,7 @@ int main (int    argc,
     libMaryInit ();
 
     {
-	unsigned const num_opts = 5;
+	unsigned const num_opts = 6;
 	MyCpp::CmdlineOption opts [num_opts];
 
 	opts [0].short_name   = "h";
@@ -396,6 +429,10 @@ int main (int    argc,
 	opts [4].long_name = "bind";
 	opts [4].with_value = true;
 	opts [4].opt_callback = cmdline_bind;
+
+	opts [5].long_name = "exit-after";
+	opts [5].with_value = true;
+	opts [5].opt_callback = cmdline_exit_after;
 
 	MyCpp::ArrayIterator<MyCpp::CmdlineOption> opts_iter (opts, num_opts);
 	MyCpp::parseCmdline (&argc, &argv, opts_iter, NULL /* callback */, NULL /* callback_data */);

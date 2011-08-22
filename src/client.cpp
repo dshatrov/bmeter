@@ -97,6 +97,7 @@ void processInput (void * const _client)
 
     // Discarding all data
     for (;;) {
+	// TODO splice() to /dev/null
 	Size nread = 0;
 	AsyncIoResult const res = client->tcp_conn.read (Memory (dummy_buf, dummy_buf_len), &nread);
 	if (res == AsyncIoResult::Error) {
