@@ -58,7 +58,7 @@ public:
 
     TcpConnection tcp_conn;
 
-    mt_const PollGroup::PollableKey pollable_key;
+    mt_mutex (::mutex) PollGroup::PollableKey pollable_key;
 
     Client (Byte const id_char)
 	: valid (true),
@@ -202,14 +202,15 @@ Result runClient ()
 
 	   client->tcp_conn.connect (options.server_addr);
 
+	   mutex.lock ();
 	   client->pollable_key = server_app.getPollGroup()->addPollable (client->tcp_conn.getPollable(),
 									  NULL /* ret_reg */);
 	   if (!client->pollable_key) {
+	       mutex.unlock ();
 	       logE_ (_func, "PollGroup::addPollable() failed: ", exc->toString());
 	       continue;
 	   }
 
-	   mutex.lock ();
 	   client_list.append (client);
 	   mutex.unlock ();
 	   client->ref ();

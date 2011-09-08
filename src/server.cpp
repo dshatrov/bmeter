@@ -65,7 +65,10 @@ public:
     DeferredConnectionSender deferred_sender;
     DeferredProcessor::Registration deferred_reg;
 
-    mt_const PollGroup::PollableKey pollable_key;
+    mt_mutex (::mutex) PollGroup::PollableKey pollable_key;
+
+    // TEST
+    Byte *test_buf;
 
     ClientSession ()
 	: valid (true),
@@ -171,6 +174,19 @@ void frameTimerTick (void * const /* cb_data */)
 	while (!session_list.iter_done (iter)) {
 	    ClientSession * const session = session_list.iter_next (iter);
 
+#if 0
+	    // TEST
+	    {
+		Size copied = 0;
+		PagePool::Page *page = page_list.first;
+		while (page) {
+		    memcpy (session->test_buf + copied, page->getData(), page->data_len);
+		    copied += page->data_len;
+		    page = page->getNextMsgPage();
+		}
+	    }
+#endif
+
 	    Sender::MessageEntry_Pages * const msg_pages =
 		    Sender::MessageEntry_Pages::createNew (0 /* max_header_len */);
 	    msg_pages->header_len = 0;
@@ -192,6 +208,8 @@ void frameTimerTick (void * const /* cb_data */)
 bool acceptOneConnection ()
 {
     Ref<ClientSession> const session = grab (new ClientSession);
+    // TEST
+    session->test_buf = new Byte [options.frame_size];
 
     {
 	TcpServer::AcceptResult const res = tcp_server.accept (&session->tcp_conn);
@@ -212,16 +230,17 @@ bool acceptOneConnection ()
     session->deferred_sender.setConnection (&session->tcp_conn);
     session->deferred_sender.setDeferredRegistration (&session->deferred_reg);
     session->deferred_sender.setFrontend (
-	    Cb<Sender::Frontend> (&sender_frontend, session, session));
+	    CbDesc<Sender::Frontend> (&sender_frontend, session, session));
 
+    mutex.lock ();
     session->pollable_key = server_app.getPollGroup()->addPollable (session->tcp_conn.getPollable(),
 								    &session->deferred_reg);
     if (!session->pollable_key) {
+	mutex.unlock ();
 	logE_ (_func, "PollGroup::addPollable() failed: ", exc->toString());
 	return true;
     }
 
-    mutex.lock ();
     session_list.append (session);
     mutex.unlock ();
     session->ref ();
