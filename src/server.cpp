@@ -63,12 +63,12 @@ public:
 
     TcpConnection tcp_conn;
     DeferredConnectionSender deferred_sender;
-    DeferredProcessor::Registration deferred_reg;
 
+    mt_mutex (::mutex) ServerThreadContext *thread_ctx;
     mt_mutex (::mutex) PollGroup::PollableKey pollable_key;
 
     // TEST
-    Byte *test_buf;
+//    Byte *test_buf;
 
     ClientSession ()
 	: valid (true),
@@ -98,8 +98,7 @@ mt_mutex (mutex) void destroySession (ClientSession * const session)
 	return;
     session->valid = false;
 
-    server_app.getPollGroup()->removePollable (session->pollable_key);
-    session->deferred_reg.release ();
+    session->thread_ctx->getPollGroup()->removePollable (session->pollable_key);
 
     session_list.remove (session);
     session->unref ();
@@ -209,7 +208,7 @@ bool acceptOneConnection ()
 {
     Ref<ClientSession> const session = grab (new ClientSession);
     // TEST
-    session->test_buf = new Byte [options.frame_size];
+//    session->test_buf = new Byte [options.frame_size];
 
     {
 	TcpServer::AcceptResult const res = tcp_server.accept (&session->tcp_conn);
@@ -224,20 +223,29 @@ bool acceptOneConnection ()
 	assert (res == TcpServer::AcceptResult::Accepted);
     }
 
+    ServerThreadContext * const thread_ctx = server_app.getServerContext()->selectThreadContext ();
+
+    session->thread_ctx = thread_ctx;
+    session->pollable_key = thread_ctx->getPollGroup()->addPollable (session->tcp_conn.getPollable(),
+								     NULL /* deferred_reg */,
+								     false /* activate */);
+    if (!session->pollable_key) {
+	logE_ (_func, "PollGroup::addPollable() failed: ", exc->toString());
+	return true;
+    }
+
     session->tcp_conn.setInputFrontend (
 	    Cb<Connection::InputFrontend> (&conn_input_frontend, session, session));
 
+    session->deferred_sender.setQueue (thread_ctx->getDeferredConnectionSenderQueue());
     session->deferred_sender.setConnection (&session->tcp_conn);
-    session->deferred_sender.setDeferredRegistration (&session->deferred_reg);
     session->deferred_sender.setFrontend (
 	    CbDesc<Sender::Frontend> (&sender_frontend, session, session));
 
     mutex.lock ();
-    session->pollable_key = server_app.getPollGroup()->addPollable (session->tcp_conn.getPollable(),
-								    &session->deferred_reg);
-    if (!session->pollable_key) {
+    if (!thread_ctx->getPollGroup()->activatePollable (session->pollable_key)) {
 	mutex.unlock ();
-	logE_ (_func, "PollGroup::addPollable() failed: ", exc->toString());
+	logE_ (_func, "PollGroup::activatePollable() failed: ", exc->toString());
 	return true;
     }
 
@@ -296,7 +304,7 @@ Result runServer ()
 	return Result::Failure;
     }
 
-    server_app.getPollGroup()->addPollable (tcp_server.getPollable(), NULL /* ret_reg */);
+    server_app.getMainThreadContext()->getPollGroup()->addPollable (tcp_server.getPollable(), NULL /* ret_reg */);
 
     server_app.getTimers()->addTimer_microseconds (frameTimerTick,
 						   NULL /* cb_data */,

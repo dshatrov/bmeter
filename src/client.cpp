@@ -85,7 +85,7 @@ mt_mutex (mutex) void destroyClient (Client * const client)
 	return;
     client->valid = false;
 
-    server_app.getPollGroup()->removePollable (client->pollable_key);
+    server_app.getMainThreadContext()->getPollGroup()->removePollable (client->pollable_key);
 
     client_list.remove (client);
     client->unref ();
@@ -203,8 +203,8 @@ Result runClient ()
 	   client->tcp_conn.connect (options.server_addr);
 
 	   mutex.lock ();
-	   client->pollable_key = server_app.getPollGroup()->addPollable (client->tcp_conn.getPollable(),
-									  NULL /* ret_reg */);
+	   client->pollable_key = server_app.getMainThreadContext()->getPollGroup()->addPollable (
+		   client->tcp_conn.getPollable(), NULL /* ret_reg */);
 	   if (!client->pollable_key) {
 	       mutex.unlock ();
 	       logE_ (_func, "PollGroup::addPollable() failed: ", exc->toString());
