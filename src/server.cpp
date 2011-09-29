@@ -22,6 +22,8 @@ public:
     bool got_server_addr;
     IpAddress server_addr;
 
+    Uint32 num_threads;
+
     Uint64 exit_after;
 
     Options ()
@@ -32,6 +34,8 @@ public:
 	  burst_width (1),
 
 	  got_server_addr (false),
+
+	  num_threads (0),
 
 	  exit_after ((Uint64) -1)
     {
@@ -44,12 +48,13 @@ void printUsage ()
 {
     outs->print ("Usage: bmeter_srv [options]\n"
 	         "Options:\n"
-		 "  -d --duration <number>  Frame duration in milliseconds (default: 40)\n"
-		 "  -s --size <number>      Frame size in bytes (default: 2500)\n"
-		 "  -b --burst <number>     Burst width (number of frames to send with zero interval (default: 1)\n"
-		 "  --bind <address>        ip_address:tcp_port to listen (default: *:7777)\n"
-		 "  --exit-after <number>   Exit after specified timeout in seconds.\n"
-		 "  -h --help               Show help message.\n");
+		 "  -d --duration <number>     Frame duration in milliseconds (default: 40)\n"
+		 "  -s --size <number>         Frame size in bytes (default: 2500)\n"
+		 "  -b --burst <number>        Burst width (number of frames to send with zero interval (default: 1)\n"
+		 "  -t --num-threads <number>  Number of threads to spawn (default: 0, use a single thread)\n"
+		 "  --bind <address>           ip_address:tcp_port to listen (default: *:7777)\n"
+		 "  --exit-after <number>      Exit after specified timeout in seconds.\n"
+		 "  -h --help                  Show help message.\n");
     outs->flush ();
 }
 
@@ -260,7 +265,7 @@ void accepted (void * /* cb_data */)
 {
     logD_ (_func, "Connection accepted");
 
-    while (acceptOneConnection ());
+    while (acceptOneConnection ()) {}
 }
 
 TcpServer::Frontend const tcp_server_frontend = {
@@ -286,6 +291,8 @@ Result runServer ()
 	logE_ (_func, "server_app.init() failed: ", exc->toString());
 	return Result::Failure;
     }
+
+    server_app.setNumThreads (options.num_threads);
 
     if (!tcp_server.open ()) {
 	logE_ (_func, "tcp_server.open() failed: ", exc->toString());
@@ -422,6 +429,20 @@ bool cmdline_exit_after (char const * /* short_name */,
     return true;
 }
 
+bool cmdline_num_threads (char const * /* short_name */,
+			  char const * /* long_name */,
+			  char const *value,
+			  void       * /* opt_data */,
+			  void       * /* cb_data */)
+{
+    if (!strToUint32_safe (value, &options.num_threads)) {
+	errs->print ("Invalid value \"", value, "\" "
+		     "for --num-threads (number expected): ", exc->toString());
+	exit (EXIT_FAILURE);
+    }
+    return true;
+}
+
 }
 
 int main (int    argc,
@@ -431,7 +452,7 @@ int main (int    argc,
     libMaryInit ();
 
     {
-	unsigned const num_opts = 6;
+	unsigned const num_opts = 7;
 	MyCpp::CmdlineOption opts [num_opts];
 
 	opts [0].short_name   = "h";
@@ -439,27 +460,32 @@ int main (int    argc,
 	opts [0].opt_callback = cmdline_help;
 
 	opts [1].short_name = "d";
-	opts [1].long_name = "duration";
+	opts [1].long_name  = "duration";
 	opts [1].with_value = true;
 	opts [1].opt_callback = cmdline_duration;
 
 	opts [2].short_name = "s";
-	opts [2].long_name = "size";
+	opts [2].long_name  = "size";
 	opts [2].with_value = true;
 	opts [2].opt_callback = cmdline_size;
 
 	opts [3].short_name = "b";
-	opts [3].long_name = "burst";
+	opts [3].long_name  = "burst";
 	opts [3].with_value = true;
 	opts [3].opt_callback = cmdline_burst;
 
-	opts [4].long_name = "bind";
+	opts [4].long_name  = "bind";
 	opts [4].with_value = true;
 	opts [4].opt_callback = cmdline_bind;
 
-	opts [5].long_name = "exit-after";
+	opts [5].long_name  = "exit-after";
 	opts [5].with_value = true;
 	opts [5].opt_callback = cmdline_exit_after;
+
+	opts [6].short_name = "t";
+	opts [6].long_name  = "num-threads";
+	opts [6].with_value = true;
+	opts [6].opt_callback = cmdline_num_threads;
 
 	MyCpp::ArrayIterator<MyCpp::CmdlineOption> opts_iter (opts, num_opts);
 	MyCpp::parseCmdline (&argc, &argv, opts_iter, NULL /* callback */, NULL /* callback_data */);
