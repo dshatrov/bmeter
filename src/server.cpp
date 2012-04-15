@@ -313,18 +313,20 @@ Result runServer ()
 
     server_app.getMainThreadContext()->getPollGroup()->addPollable (tcp_server.getPollable(), NULL /* ret_reg */);
 
-    server_app.getTimers()->addTimer_microseconds (frameTimerTick,
-						   NULL /* cb_data */,
-						   NULL /* coderef_container */,
-						   (Time) (options.frame_duration * 1000 * options.burst_width),
-						   true /* periodical */);
+    server_app.getServerContext()->getTimers()->addTimer_microseconds (
+            frameTimerTick,
+            NULL /* cb_data */,
+            NULL /* coderef_container */,
+            (Time) (options.frame_duration * 1000 * options.burst_width),
+            true /* periodical */);
 
     if (options.exit_after != (Uint64) -1) {
-	server_app.getTimers()->addTimer (exitTimerTick,
-					  NULL /* cb_data */,
-					  NULL /* coderef_container */,
-					  options.exit_after,
-					  false /* periodical */);
+	server_app.getServerContext()->getTimers()->addTimer (
+                exitTimerTick,
+                NULL /* cb_data */,
+                NULL /* coderef_container */,
+                options.exit_after,
+                false /* periodical */);
     }
 
     logI_ (_func, "Starting...");
