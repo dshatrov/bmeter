@@ -200,6 +200,7 @@ Result runClient ()
 	   client->tcp_conn.setFrontend (
 		   Cb<TcpConnection::Frontend> (&tcp_conn_frontend, client, client));
 
+           // TODO Check return value.
 	   client->tcp_conn.connect (options.server_addr);
 
 	   mutex.lock ();
